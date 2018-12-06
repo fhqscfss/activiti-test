@@ -35,13 +35,18 @@ public class DemoMain {
         ProcessEngine processEngine = getProcessEngine();
 
         //部署流程定义文件
-        String processDefinitionId = deployment(processEngine);
+        ProcessDefinition processDefinition = deployment(processEngine);
 
         //启动运行流程
-        //获取运行时对像
-        ProcessInstance processInstance = getProcessInstance(processEngine, processDefinitionId);
+        ProcessInstance processInstance = getProcessInstance(processEngine, processDefinition);
 
         //处理流程任务
+        processTask(processEngine, processInstance);
+
+        LOGGER.info("程序结束");
+    }
+
+    private static void processTask(ProcessEngine processEngine, ProcessInstance processInstance) throws ParseException {
         Scanner scanner = new Scanner(System.in);
         while (processInstance != null && !processInstance.isEnded()){
             TaskService taskService = processEngine.getTaskService();
@@ -52,24 +57,7 @@ public class DemoMain {
                 FormService formService = processEngine.getFormService();
                 TaskFormData taskFormData = formService.getTaskFormData(task.getId());
                 List<FormProperty> formProperties = taskFormData.getFormProperties();
-                String line = null;
-                Map<String,Object> variables = Maps.newHashMap();
-                for (FormProperty property : formProperties){
-                    //判断用户输入类型
-                    if(StringFormType.class.isInstance(property.getType())){
-                        LOGGER.info("请输入【{}】?",property.getName());
-                        line = scanner.nextLine();
-                        LOGGER.info("您输入的内容是【{}】",line);
-                        variables.put(property.getId(),line);
-                    }else{
-                        LOGGER.info("请输入时间，格式为yyyy-MM-dd【{}】?",property.getName());
-                        line = scanner.nextLine();
-                        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-                        Date parse = sdf.parse(line);
-                        LOGGER.info("您输入的内容是【{}】",line);
-                        variables.put(property.getId(),parse);
-                    }
-                }
+                Map<String, Object> variables = getStringObjectMap(scanner, formProperties);
                 //提交表单
                 taskService.complete(task.getId(),variables);
                 //提交后更新流程实例
@@ -80,17 +68,38 @@ public class DemoMain {
             }
         }
         scanner.close();
-        LOGGER.info("程序结束");
     }
 
-    private static ProcessInstance getProcessInstance(ProcessEngine processEngine, String processDefinitionId) {
+    private static Map<String, Object> getStringObjectMap(Scanner scanner, List<FormProperty> formProperties) throws ParseException {
+        Map<String,Object> variables = Maps.newHashMap();
+        String line = null;
+        for (FormProperty property : formProperties){
+            //判断用户输入类型
+            if(StringFormType.class.isInstance(property.getType())){
+                LOGGER.info("请输入【{}】?",property.getName());
+                line = scanner.nextLine();
+                LOGGER.info("您输入的内容是【{}】",line);
+                variables.put(property.getId(),line);
+            }else{
+                LOGGER.info("请输入时间，格式为yyyy-MM-dd【{}】?",property.getName());
+                line = scanner.nextLine();
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+                Date parse = sdf.parse(line);
+                LOGGER.info("您输入的内容是【{}】",line);
+                variables.put(property.getId(),parse);
+            }
+        }
+        return variables;
+    }
+
+    private static ProcessInstance getProcessInstance(ProcessEngine processEngine, ProcessDefinition processDefinition) {
         RuntimeService runtimeService = processEngine.getRuntimeService();
-        ProcessInstance processInstance = runtimeService.startProcessInstanceById(processDefinitionId);
+        ProcessInstance processInstance = runtimeService.startProcessInstanceById(processDefinition.getId());
         LOGGER.info("启动流程【{}】",processInstance.getProcessDefinitionKey());
         return processInstance;
     }
 
-    private static String deployment(ProcessEngine processEngine) {
+    private static ProcessDefinition deployment(ProcessEngine processEngine) {
         RepositoryService repositoryService = processEngine.getRepositoryService();
         DeploymentBuilder deploymentBuilder = repositoryService.createDeployment();
         deploymentBuilder.addClasspathResource("activiti-status.bpmn20.xml");
@@ -104,7 +113,7 @@ public class DemoMain {
         String processDefinitionId = processDefinition.getId();
         String processDefinitionName = processDefinition.getName();
         LOGGER.info("流程定义名称为【{}】,id为【{}】",processDefinitionName,processDefinitionId);
-        return processDefinitionId;
+        return processDefinition;
     }
 
     private static ProcessEngine getProcessEngine() {
